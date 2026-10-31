@@ -1,0 +1,202 @@
+local success, result = pcall(function()
+	-- ============================================================================
+	-- SCRIPT NAME: ZFscVD (PHANTOM EDITION - ADVANCED FEATURES)
+	-- FEATURES: Teleport to Generator, Auto Skill Check, Invisible, Spectator Clone
+	-- ============================================================================
+
+	local _G = getgenv()
+	if _G.ZFscVD_Executed then _G.Running = false task.wait(0.3) end
+	_G.ZFscVD_Executed = true
+	_G.Running = true
+
+	local Workspace = game:GetService("Workspace")
+	local Players = game:GetService("Players")
+	local LocalPlayer = Players.LocalPlayer
+	local RunService = game:GetService("RunService")
+	local VirtualInputManager = game:GetService("VirtualInputManager")
+
+	local Config = {
+		AutoTeleportGen = false,
+		AutoSkillCheck = false,
+		Invisible = false,
+		SpectatorClone = false,
+		SuperESP = false
+	}
+
+	-- Memuat Pustaka Kavo UI Library
+	local libraryUrl = "https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"
+	local uiSuccess, KavoLib = pcall(function()
+		return loadstring(game:HttpGet(libraryUrl))()
+	end)
+
+	if not uiSuccess or not KavoLib then
+		warn("[ZFscVD] Gagal memuat Kavo UI.")
+		return
+	end
+
+	local Window = KavoLib.CreateLib("ZFscVD : PHANTOM ADVANCED", "BloodTheme")
+
+	-- Pembuatan Tab Menu
+	local MainTab = Window:NewTab("Phantom System")
+	local MainSection = MainTab:NewSection("Fitur Utama & Teleport")
+
+	local VisualTab = Window:NewTab("Visual & Trick")
+	local VisualSection = VisualTab:NewSection("Invisible & Spectator Clone")
+
+	local EspTab = Window:NewTab("Super ESP")
+	local EspSection = EspTab:NewSection("Informasi ESP")
+
+	-- Tombol & Toggle UI
+	MainSection:NewToggle("Auto Teleport ke Generator", "Otomatis berpindah ke generator yang belum selesai", function(v)
+		Config.AutoTeleportGen = v
+	end)
+
+	MainSection:NewToggle("Auto Skill Check", "Otomatis menekan spasi saat skill check muncul", function(v)
+		Config.AutoSkillCheck = v
+	end)
+
+	VisualSection:NewToggle("Invisible Mode (Tembus Pandang Total)", "Membuat karaktermu tidak terlihat secara lokal", function(v)
+		Config.Invisible = v
+		local char = LocalPlayer.Character
+		if char then
+			for _, part in ipairs(char:GetDescendants()) do
+				if part:IsA("BasePart") or part:IsA("Decal") then
+					part.Transparency = v and 1 or 0
+				end
+			end
+		end
+	end)
+
+	local cloneModel = nil
+	VisualSection:NewToggle("Manipulasi Penonton (Clone ke Void)", "Membuat klon dummy di void untuk mengecoh spectator", function(v)
+		Config.SpectatorClone = v
+		local char = LocalPlayer.Character
+		if v and char then
+			char.Archivable = true
+			cloneModel = char:Clone()
+			cloneModel.Name = "ZFscVD_VoidClone"
+			
+			-- Posisikan klon di void (bawah map) agar spectator melihat ke sana
+			for _, p in ipairs(cloneModel:GetDescendants()) do
+				if p:IsA("BasePart") then
+					p.Anchored = true
+				end
+			end
+			cloneModel.Parent = Workspace
+			if cloneModel:FindFirstChild("HumanoidRootPart") then
+				cloneModel.HumanoidRootPart.CFrame = CFrame.new(0, -9999, 0)
+			end
+		else
+			if cloneModel then
+				cloneModel:Destroy()
+				cloneModel = nil
+			end
+		end
+	end)
+
+	EspSection:NewToggle("Aktifkan Super ESP", "Menampilkan penanda generator dan pemain", function(v)
+		Config.SuperESP = v
+	end)
+
+	-- ============================================================================
+	-- 1. LOCAL SKILLCHECK AUTOMATION
+	-- ============================================================================
+	LocalPlayer.PlayerGui.DescendantAdded:Connect(function(descendant)
+		if Config.AutoSkillCheck and (descendant.Name == "SkillCheck" or descendant.Name == "Pointer") then
+			task.wait(math.random(30, 45) / 1000)
+			VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+			task.wait(0.02)
+			VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+		end
+	end)
+
+	-- ============================================================================
+	-- 2. AUTO TELEPORT TO GENERATOR LOOP
+	-- ============================================================================
+	task.spawn(function()
+		while _G.Running do
+			if Config.AutoTeleportGen then
+				local char = LocalPlayer.Character
+				local root = char and char:FindFirstChild("HumanoidRootPart")
+				
+				if root then
+					local targetGen = nil
+					for _, obj in ipairs(Workspace:GetDescendants()) do
+						if (obj.Name:match("Generator") or obj.Name:match("Gen")) and obj:IsA("Model") then
+							local progress = obj:GetAttribute("Progress") or 0
+							if progress < 100 then
+								targetGen = obj
+								break
+							end
+						end
+					end
+					
+					if targetGen then
+						local part = targetGen.PrimaryPart or targetGen:FindFirstChildWhichIsA("BasePart", true)
+						local prompt = targetGen:FindFirstChildWhichIsA("ProximityPrompt", true)
+						if part then
+							root.CFrame = part.CFrame + Vector3.new(0, 3, 2)
+							if prompt and prompt.Enabled then fireproximityprompt(prompt) end
+						end
+					end
+				end
+			end
+			task.wait(0.5)
+		end
+	end)
+
+	-- ============================================================================
+	-- 3. SUPER ESP SYSTEM
+	-- ============================================================================
+	local function createLocalLabel(object, text, color)
+		local old = object:FindFirstChild("ZFscVD_PhantomESP")
+		if old then old:Destroy() end
+
+		local bb = Instance.new("BillboardGui")
+		bb.Name = "ZFscVD_PhantomESP"
+		bb.AlwaysOnTop = true
+		bb.Size = UDim2.new(0, 150, 0, 40)
+		bb.StudsOffset = Vector3.new(0, 3, 0)
+		bb.Parent = object
+
+		local lbl = Instance.new("TextLabel")
+		lbl.Size = UDim2.new(1, 0, 1, 0)
+		lbl.BackgroundTransparency = 1
+		lbl.Text = text
+		lbl.TextColor3 = color
+		lbl.TextSize = 12
+		lbl.Font = Enum.Font.SourceSansBold
+		lbl.TextStrokeTransparency = 0
+		lbl.Parent = bb
+	end
+
+	task.spawn(function()
+		while _G.Running do
+			if Config.SuperESP then
+				for _, obj in ipairs(Workspace:GetDescendants()) do
+					if (obj.Name:match("Generator") or obj.Name:match("Gen")) and obj:IsA("Model") then
+						local progress = obj:GetAttribute("Progress") or 0
+						createLocalLabel(obj, "GEN ["..tostring(progress).."%]", Color3.fromRGB(255, 0, 0))
+					end
+				end
+				for _, p in ipairs(Players:GetPlayers()) do
+					if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+						local isKiller = p:GetAttribute("Role") == "Killer" or p.TeamColor == BrickColor.new("Bright red")
+						local pColor = isKiller and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(0, 255, 0)
+						local pText = isKiller and "⚠️ KILLER ⚠️" or ("SURVIVOR: " .. p.Name)
+						createLocalLabel(p.Character.HumanoidRootPart, pText, pColor)
+					end
+				end
+			else
+				for _, v in ipairs(Workspace:GetDescendants()) do
+					if v.Name == "ZFscVD_PhantomESP" then v:Destroy() end
+				end
+			end
+			task.wait(2)
+		end
+	end)
+end)
+
+if not success then
+	warn("Loadstring failed:", result)
+end
